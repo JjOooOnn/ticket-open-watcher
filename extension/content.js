@@ -14,6 +14,9 @@
   }
   const readyText = "예매 준비가 완료됐어요";
   const accessErrorText = "정상적인 접근이 아닙니다";
+  function isCountdown(button) {
+    return /^남은\s*시간\s*\d+(?:\s*:\s*\d{2}){1,2}$/.test(button.textContent.trim());
+  }
   const state = {
     phase: "idle",
     message: "감시 전",
@@ -32,8 +35,9 @@
     const candidates = site === "practice"
       ? [...document.querySelectorAll("#book")]
       : site === "interpark"
-        ? [...document.querySelectorAll(".buttons > button")]
-          .filter((button) => button.textContent.includes("예매하기"))
+        // Countdown and booking states share a button; CSS module names can change.
+        ? [...document.querySelectorAll("button")]
+          .filter((button) => isCountdown(button) || button.textContent.includes("예매하기"))
         : [];
     return {
       title: document.querySelector("h3")?.textContent.trim() || document.title,
@@ -99,6 +103,11 @@
     }
 
     const button = info.candidates[0];
+    // A styled countdown may lack the native disabled attribute. Never click it.
+    if (isCountdown(button)) {
+      state.message = "예매 오픈 대기 중";
+      return;
+    }
     if (!enabled(button)) {
       state.message = "버튼 활성화 대기 중";
       return;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NOL 예매 버튼 감시",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "인터파크와 티켓팅 연습 사이트에서 예매 버튼이 활성화되면 한 번 클릭합니다.",
   "permissions": ["activeTab", "scripting", "storage"],
   "action": {

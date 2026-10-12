@@ -9,7 +9,7 @@ const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../extension/content.js"), "utf8");
 const ticketUrl = "https://tickets.interpark.com/gates/ticket/26014329?bc=61776";
 
-function fixture({ active = false, count = 1, site = "interpark" } = {}) {
+function fixture({ active = false, count = 1, site = "interpark", label, legacyContainer = true } = {}) {
   const listeners = new Map();
   const observers = [];
   const timers = new Map();
@@ -23,7 +23,7 @@ function fixture({ active = false, count = 1, site = "interpark" } = {}) {
   function makeButton(disabled = true) {
     const attrs = {};
     const button = {
-      textContent: site === "practice" && !active ? "남은시간 00:05" : "10/12 19:00 예매하기",
+      textContent: label ?? (site === "practice" && !active ? "남은시간 00:05" : "10/12 19:00 예매하기"),
       disabled,
       isConnected: true,
       style: { display: "block", visibility: "visible" },
@@ -49,7 +49,8 @@ function fixture({ active = false, count = 1, site = "interpark" } = {}) {
     querySelector: (selector) => selector === "h3" ? { textContent: "테스트 공연" } : null,
     querySelectorAll(selector) {
       if (selector === "h2") return [{ textContent: "예매 준비가 완료됐어요" }];
-      if (selector === ".buttons > button") return buttons;
+      if (selector === ".buttons > button") return legacyContainer ? buttons : [];
+      if (selector === "button") return buttons;
       if (selector === "#book") return site === "practice" ? buttons : [];
       return [];
     },
@@ -91,9 +92,10 @@ function fixture({ active = false, count = 1, site = "interpark" } = {}) {
     get activeTimers() { return timers.size; },
     mutate() { for (const observer of observers) if (observer.active) observer.callback(); },
     tickRoute() { for (const callback of timers.values()) callback(); },
-    replace({ active: replacementActive = false } = {}) {
+    replace({ active: replacementActive = false, label: replacementLabel } = {}) {
       buttons.forEach((button) => { button.isConnected = false; });
       buttons = [makeButton(!replacementActive)];
+      if (replacementLabel !== undefined) buttons[0].textContent = replacementLabel;
       this.mutate();
     },
     duplicate() { buttons.push(makeButton(false)); this.mutate(); },
@@ -223,6 +225,53 @@ test("practice countdown button is selected before its label changes", () => {
   app.mutate();
   assert.equal(app.clickCount, 1);
   assert.equal(app.send("status").phase, "clicked");
+});
+
+test("interpark countdown can start without the legacy container and waits for booking text", () => {
+  const app = fixture({ label: "남은시간 02:45", legacyContainer: false });
+  assert.equal(app.send("status").canStart, true);
+  assert.equal(app.send("status").label, "남은시간 02:45");
+  assert.equal(app.send("start").phase, "watching");
+  const button = app.buttons()[0];
+  for (const label of ["남은시간 02:44", "남은 시간\n00:00", "남은시간 01:00:00"]) {
+    button.textContent = label;
+    // Some pages only style the countdown as disabled, or enable before relabeling.
+    button.disabled = false;
+    app.mutate();
+    app.tickRoute();
+    assert.equal(app.clickCount, 0);
+  }
+  button.disabled = true;
+  button.textContent = "예매하기";
+  app.mutate();
+  assert.equal(app.clickCount, 0);
+  button.disabled = false;
+  app.mutate();
+  app.mutate();
+  assert.equal(app.clickCount, 1);
+  assert.equal(app.storage.lastClick.label, "예매하기");
+  assert.equal(app.activeObservers, 0);
+  assert.equal(app.activeTimers, 0);
+});
+
+test("interpark countdown replaced with an enabled booking button clicks once", () => {
+  const app = fixture({ label: "남은시간 00:01", legacyContainer: false });
+  assert.equal(app.send("start").phase, "watching");
+  app.replace({ active: true, label: "예매하기" });
+  app.mutate();
+  assert.equal(app.clickCount, 1);
+});
+
+test("unrelated buttons cannot start watching and ambiguous countdowns are rejected", () => {
+  for (const label of ["뒤로가기", "알림 신청", "남은시간 안내"]) {
+    const app = fixture({ active: true, label, legacyContainer: false });
+    assert.equal(app.send("status").canStart, false);
+    assert.equal(app.send("start").phase, "error");
+    assert.equal(app.clickCount, 0);
+  }
+  const duplicate = fixture({ count: 2, label: "남은시간 02:45", legacyContainer: false });
+  assert.equal(duplicate.send("start").canStart, false);
+  assert.equal(duplicate.clickCount, 0);
 });
 
 test("practice page locks after manual click and does not rearm", () => {
