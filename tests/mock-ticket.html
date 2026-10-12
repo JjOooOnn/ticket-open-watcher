@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+  <head><meta charset="utf-8"><title>모의 예매 페이지</title></head>
+  <body>
+    <h2>예매 준비가 완료됐어요</h2>
+    <h3>테스트 공연</h3>
+    <div class="buttons"><button type="button" disabled>10/12 19:00 예매하기</button></div>
+    <p>실제 사이트에는 연결되지 않는 모의 화면입니다.</p>
+    <p>클릭 횟수: <output id="count">0</output></p>
+    <button type="button" id="enable">활성화</button>
+    <button type="button" id="replace">버튼 교체 후 활성화</button>
+    <button type="button" id="duplicate">중복 버튼 추가</button>
+    <script>
+      const buttons = document.querySelector(".buttons");
+      let count = 0;
+      buttons.addEventListener("click", (event) => {
+        if (event.target.matches("button")) document.getElementById("count").value = ++count;
+      });
+      document.getElementById("enable").addEventListener("click", () => {
+        buttons.querySelector("button").disabled = false;
+      });
+      document.getElementById("replace").addEventListener("click", () => {
+        const replacement = document.createElement("button");
+        replacement.type = "button";
+        replacement.textContent = "10/12 19:00 예매하기";
+        buttons.replaceChildren(replacement);
+      });
+      document.getElementById("duplicate").addEventListener("click", () => {
+        const duplicate = buttons.querySelector("button").cloneNode(true);
+        buttons.append(duplicate);
+      });
+    </script>
+  </body>
+</html>

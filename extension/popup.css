@@ -1,0 +1,13 @@
+:root { color-scheme: light; font-family: system-ui, sans-serif; }
+body { width: 330px; margin: 0; color: #20242b; background: #fff; }
+main { padding: 18px; }
+h1 { margin: 0 0 16px; font-size: 18px; }
+dl { display: grid; grid-template-columns: 44px 1fr; gap: 10px 8px; margin: 0; font-size: 13px; }
+dt { color: #656c76; }
+dd { margin: 0; overflow-wrap: anywhere; }
+.actions { display: flex; gap: 8px; margin-top: 18px; }
+button { flex: 1; min-height: 36px; border: 0; border-radius: 6px; color: #fff; background: #3158d8; font: inherit; cursor: pointer; }
+button + button { color: #20242b; background: #e9edf2; }
+button:disabled { cursor: default; opacity: .45; }
+.notice, .record { margin: 14px 0 0; font-size: 12px; line-height: 1.45; color: #626a75; }
+.record { padding-top: 10px; border-top: 1px solid #e9edf2; }
