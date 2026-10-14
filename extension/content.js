@@ -7,13 +7,27 @@
 
   const interparkUrl = /^https:\/\/tickets\.interpark\.com\/gates\/ticket\/\d+(?:[/?#]|$)/;
   const practiceUrl = /^https:\/\/ticket\.ggul\.store\/(?:[?#]|$)/;
+  const ssgUrl = /^https:\/\/ticket\.ssg\.com\/ticket\/?(?:[?#]|$)/;
   function siteForUrl(url) {
     if (interparkUrl.test(url)) return "interpark";
     if (practiceUrl.test(url)) return "practice";
+    if (ssgUrl.test(url)) return "ssg";
     return null;
   }
   const readyText = "예매 준비가 완료됐어요";
   const accessErrorText = "정상적인 접근이 아닙니다";
+  function buttonText(button) {
+    return button.textContent.replace(/\s+/g, " ").trim();
+  }
+  function isCountdown(button) {
+    return /^남은\s*시간\s*\d+(?:\s*:\s*\d{2}){1,2}$/.test(buttonText(button));
+  }
+  function isScheduledOpening(button) {
+    return /^\d{1,2}\.\d{1,2}\s*\([월화수목금토일]\)\s*\d{1,2}\s*:\s*\d{2}\s*오픈\s*예정$/.test(buttonText(button));
+  }
+  function isSsgBooking(button) {
+    return /^(?:예매하기|예매)$/.test(buttonText(button));
+  }
   const state = {
     phase: "idle",
     message: "감시 전",
@@ -27,17 +41,22 @@
   function pageInfo() {
     const site = siteForUrl(location.href);
     const headings = [...document.querySelectorAll("h2")];
-    const ready = headings.some((heading) => heading.textContent.trim() === readyText);
+    const ready = site === "ssg" || headings.some((heading) => heading.textContent.trim() === readyText);
     const accessError = document.body?.textContent.includes(accessErrorText) || false;
     const candidates = site === "practice"
       ? [...document.querySelectorAll("#book")]
       : site === "interpark"
-        ? [...document.querySelectorAll(".buttons > button")]
-          .filter((button) => button.textContent.includes("예매하기"))
-        : [];
+        // Countdown and booking states share a button; CSS module names can change.
+        ? [...document.querySelectorAll("button")]
+          .filter((button) => isCountdown(button) || button.textContent.includes("예매하기"))
+        : site === "ssg"
+          ? [...document.querySelectorAll("button")]
+            .filter((button) => isCountdown(button) || isScheduledOpening(button) || isSsgBooking(button))
+          : [];
     return {
+      site,
       title: document.querySelector("h3")?.textContent.trim() || document.title,
-      label: candidates.length === 1 ? candidates[0].textContent.trim() : "",
+      label: candidates.length === 1 ? buttonText(candidates[0]) : "",
       ready,
       accessError,
       candidates
@@ -99,6 +118,15 @@
     }
 
     const button = info.candidates[0];
+    // A styled countdown may lack the native disabled attribute. Never click it.
+    if (isCountdown(button) || (info.site === "ssg" && isScheduledOpening(button))) {
+      state.message = "예매 오픈 대기 중";
+      return;
+    }
+    if (info.site === "ssg" && !isSsgBooking(button)) {
+      state.message = "예매 가능한 버튼 문구를 기다리는 중";
+      return;
+    }
     if (!enabled(button)) {
       state.message = "버튼 활성화 대기 중";
       return;

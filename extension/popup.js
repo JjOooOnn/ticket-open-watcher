@@ -3,7 +3,8 @@
 
   const urlPatterns = [
     /^https:\/\/tickets\.interpark\.com\/gates\/ticket\/\d+(?:[/?#]|$)/,
-    /^https:\/\/ticket\.ggul\.store\/(?:[?#]|$)/
+    /^https:\/\/ticket\.ggul\.store\/(?:[?#]|$)/,
+    /^https:\/\/ticket\.ssg\.com\/ticket\/?(?:[?#]|$)/
   ];
   const titleElement = document.getElementById("show-title");
   const labelElement = document.getElementById("button-label");

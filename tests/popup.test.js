@@ -52,3 +52,25 @@ test("popup still accepts Interpark and rejects unrelated sites", async () => {
   assert.equal(unrelated.injections.length, 0);
   assert.equal(unrelated.elements.get("start").disabled, true);
 });
+
+test("popup accepts SSG ticket URLs and can send start to the selected tab", async () => {
+  for (const suffix of ["", "/", "?event=1", "#tickets", "/?event=1#tickets"]) {
+    const popup = await openPopup(`https://ticket.ssg.com/ticket${suffix}`);
+    assert.equal(popup.injections.length, 1);
+    assert.equal(popup.elements.get("start").disabled, false);
+    await popup.elements.get("start").listeners.click();
+    assert.equal(popup.messages.at(-1).type, "start");
+    assert.equal(popup.messages.at(-1).tabId, 42);
+  }
+});
+
+test("popup rejects unsupported SSG paths and similar hosts", async () => {
+  for (const url of ["http://ticket.ssg.com/ticket", "https://ticket.ssg.com/",
+    "https://ticket.ssg.com/tickets", "https://ticket.ssg.com/ticket/detail",
+    "https://ticket.ssg.com/ticket//", "https://ticket.ssg.com.evil.test/ticket"]) {
+    const popup = await openPopup(url);
+    assert.equal(popup.injections.length, 0);
+    assert.equal(popup.elements.get("start").disabled, true);
+    assert.equal(popup.messages.length, 0);
+  }
+});
