@@ -10,7 +10,8 @@ const source = fs.readFileSync(path.join(__dirname, "../extension/content.js"), 
 const ticketUrl = "https://tickets.interpark.com/gates/ticket/26014329?bc=61776";
 
 function fixture({ active = false, count = 1, site = "interpark", label, legacyContainer = true,
-  ready = site !== "ssg", url, nested = false } = {}) {
+  ready = site !== "ssg", heading = ready ? "예매 준비가 완료됐어요" : null,
+  url, nested = false } = {}) {
   const listeners = new Map();
   const observers = [];
   const timers = new Map();
@@ -59,10 +60,10 @@ function fixture({ active = false, count = 1, site = "interpark", label, legacyC
   const document = {
     title: "테스트 공연",
     documentElement: {},
-    body: { textContent: ready ? "예매 준비가 완료됐어요" : "SSG 티켓" },
+    body: { textContent: heading ?? "" },
     querySelector: (selector) => selector === "h3" && site !== "ssg" ? { textContent: "테스트 공연" } : null,
     querySelectorAll(selector) {
-      if (selector === "h2") return ready ? [{ textContent: "예매 준비가 완료됐어요" }] : [];
+      if (selector === "h2") return heading === null ? [] : [{ textContent: heading }];
       if (selector === ".buttons > button") return legacyContainer ? buttons : [];
       if (selector === "button") return buttons;
       if (selector === "#book") return site === "practice" ? buttons : [];
@@ -108,6 +109,11 @@ function fixture({ active = false, count = 1, site = "interpark", label, legacyC
     get activeObservers() { return observers.filter((observer) => observer.active).length; },
     get activeTimers() { return timers.size; },
     mutate() { for (const observer of observers) if (observer.active) observer.callback(); },
+    setHeading(value) {
+      heading = value;
+      document.body.textContent = value ?? "";
+      this.mutate();
+    },
     tickRoute() { for (const callback of timers.values()) callback(); },
     replace({ active: replacementActive = false, label: replacementLabel } = {}) {
       buttons.forEach((button) => { button.isConnected = false; });
@@ -284,6 +290,104 @@ test("interpark countdown replaced with an enabled booking button clicks once", 
   app.replace({ active: true, label: "예매하기" });
   app.mutate();
   assert.equal(app.clickCount, 1);
+});
+
+test("NOL screenshot heading and nested countdown allow monitoring until booking is enabled", () => {
+  for (const order of ["label-first", "enabled-first"]) {
+    const app = fixture({ heading: "예매는 오픈 시간부터 가능해요",
+      label: "남은시간 15:17", nested: true, legacyContainer: false });
+    assert.equal(app.send("status").label, "남은시간 15:17");
+    assert.equal(app.send("status").canStart, true);
+    assert.equal(app.send("start").phase, "watching");
+    assert.equal(app.send("status").message, "예매 오픈 대기 중");
+    const button = app.buttons()[0];
+    button.labelChild.textContent = "남은시간 00:00";
+    app.mutate();
+    assert.equal(app.clickCount, 0);
+    if (order === "label-first") button.labelChild.textContent = "예매하기";
+    else button.disabled = false;
+    app.mutate();
+    app.tickRoute();
+    assert.equal(app.clickCount, 0);
+    button.labelChild.textContent = "예매하기";
+    button.disabled = false;
+    app.mutate();
+    app.mutate();
+    app.tickRoute();
+    assert.equal(app.clickCount, 1);
+    assert.equal(app.send("status").phase, "clicked");
+    assert.equal(app.send("start").canStart, false);
+    assert.equal(app.storage.lastClick.label, "예매하기");
+    assert.equal(app.activeObservers, 0);
+    assert.equal(app.activeTimers, 0);
+  }
+});
+
+test("NOL accepts missing or arbitrary headings and survives heading changes while watching", () => {
+  for (const heading of [null, "", "다른 안내 제목", "예매 준비가 완료됐어요"]) {
+    const app = fixture({ heading, label: "남은시간 00:01" });
+    assert.equal(app.send("status").canStart, true);
+    assert.equal(app.send("start").phase, "watching");
+    for (const changed of ["예매는 오픈 시간부터 가능해요", null, "변경된 안내"]) {
+      app.setHeading(changed);
+      app.tickRoute();
+      assert.equal(app.send("status").phase, "watching");
+      assert.equal(app.send("status").message, "예매 오픈 대기 중");
+      assert.equal(app.clickCount, 0);
+    }
+    app.replace({ active: true, label: "예매하기" });
+    assert.equal(app.clickCount, 1);
+
+    const active = fixture({ heading, active: true, label: "예매하기" });
+    assert.equal(active.send("start").phase, "clicked");
+    assert.equal(active.clickCount, 1);
+  }
+});
+
+test("NOL without a heading still rejects missing, ambiguous, error and unsupported targets", () => {
+  const blocked = [
+    fixture({ heading: null, count: 0 }),
+    fixture({ heading: null, count: 2, label: "남은시간 00:01" }),
+    fixture({ heading: null, active: true, label: "뒤로가기" }),
+    fixture({ heading: null, active: true, url: "https://example.com/" }),
+    fixture({ heading: null, active: true, url: "http://tickets.interpark.com/gates/ticket/26014329" }),
+    fixture({ heading: null, active: true, url: "https://tickets.interpark.com/gates/ticket/not-a-number" })
+  ];
+  const accessError = fixture({ heading: "정상적인 접근이 아닙니다", active: true });
+  blocked.push(accessError);
+  for (const app of blocked) {
+    assert.equal(app.send("status").canStart, false);
+    assert.equal(app.send("start").phase, "error");
+    assert.equal(app.clickCount, 0);
+    assert.equal(app.activeObservers, 0);
+    assert.equal(app.activeTimers, 0);
+  }
+  assert.equal(accessError.send("status").message, "접근 오류 화면입니다.");
+});
+
+test("NOL without a heading preserves manual stop, manual click, navigation and access error cleanup", () => {
+  for (const action of ["stop", "manual-click", "route", "pagehide", "access-error", "duplicate"]) {
+    const app = fixture({ heading: null, label: "남은시간 00:01", nested: true });
+    assert.equal(app.send("start").phase, "watching");
+    if (action === "stop") app.send("stop");
+    else if (action === "manual-click") {
+      app.buttons()[0].textContent = "예매하기";
+      app.buttons()[0].disabled = false;
+      app.manualClick();
+    } else if (action === "route") {
+      app.location.href += "#changed";
+      app.tickRoute();
+    } else if (action === "pagehide") app.dispatch("pagehide");
+    else if (action === "access-error") app.setHeading("정상적인 접근이 아닙니다");
+    else app.duplicate();
+    app.replace({ active: true, label: "예매하기" });
+    app.tickRoute();
+    assert.equal(app.clickCount, action === "manual-click" ? 1 : 0);
+    assert.equal(app.activeObservers, 0);
+    assert.equal(app.activeTimers, 0);
+    assert.equal(app.send("status").phase,
+      ["access-error", "duplicate"].includes(action) ? "error" : "stopped");
+  }
 });
 
 test("unrelated buttons cannot start watching and ambiguous countdowns are rejected", () => {
@@ -493,7 +597,7 @@ test("SSG content URL matching allows only the ticket page with optional slash, 
     assert.equal(app.send("start").phase, "error");
     assert.equal(app.clickCount, 0);
   }
-  const interpark = fixture({ ready: false });
-  assert.equal(interpark.send("status").canStart, false);
-  assert.equal(interpark.send("start").phase, "error");
+  const practice = fixture({ site: "practice", ready: false });
+  assert.equal(practice.send("status").canStart, false);
+  assert.equal(practice.send("start").phase, "error");
 });

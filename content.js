@@ -41,7 +41,9 @@
   function pageInfo() {
     const site = siteForUrl(location.href);
     const headings = [...document.querySelectorAll("h2")];
-    const ready = site === "ssg" || headings.some((heading) => heading.textContent.trim() === readyText);
+    // NOL gate headings vary before opening; URL and button candidates identify it.
+    const ready = site === "interpark" || site === "ssg" ||
+      headings.some((heading) => heading.textContent.trim() === readyText);
     const accessError = document.body?.textContent.includes(accessErrorText) || false;
     const candidates = site === "practice"
       ? [...document.querySelectorAll("#book")]

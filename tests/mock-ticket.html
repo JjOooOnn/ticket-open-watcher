@@ -2,9 +2,9 @@
 <html lang="ko">
   <head><meta charset="utf-8"><title>모의 예매 페이지</title></head>
   <body>
-    <h2>예매 준비가 완료됐어요</h2>
+    <h2>예매는 오픈 시간부터 가능해요</h2>
     <h3>테스트 공연</h3>
-    <div id="booking-buttons"><button type="button" class="_primary_2p3w6_7 _disabled_2p3w6_34" disabled>남은시간 02:45</button></div>
+    <div id="booking-buttons"><button type="button" class="_primary_2p3w6_7 _disabled_2p3w6_34" disabled><span class="_content_2p3w6_38">남은시간 02:45</span></button></div>
     <p>실제 사이트에는 연결되지 않는 모의 화면입니다.</p>
     <p>클릭 횟수: <output id="count">0</output></p>
     <button type="button" id="enable">활성화</button>
@@ -14,12 +14,13 @@
       const buttons = document.getElementById("booking-buttons");
       let count = 0;
       buttons.addEventListener("click", (event) => {
-        if (event.target.matches("button")) document.getElementById("count").value = ++count;
+        if (event.target.closest("#booking-buttons button")) document.getElementById("count").value = ++count;
       });
       document.getElementById("enable").addEventListener("click", () => {
-        buttons.querySelector("button").textContent = "예매하기";
-        buttons.querySelector("button").classList.remove("_disabled_2p3w6_34");
-        buttons.querySelector("button").disabled = false;
+        const button = buttons.querySelector("button");
+        (button.querySelector("span") || button).textContent = "예매하기";
+        button.classList.remove("_disabled_2p3w6_34");
+        button.disabled = false;
       });
       document.getElementById("replace").addEventListener("click", () => {
         const replacement = document.createElement("button");
